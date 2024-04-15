@@ -24,6 +24,12 @@ def get_audio_for_id(folder: str, id: str) -> List[str]:
     return audiofiles_list
 
 
+def average_mfcc(mfcc_list: List) -> np.ndarray:
+    mfcc_stack = np.hstack(mfcc_list)
+    mean_mfcc = np.mean(mfcc_stack, axis=1)
+    return mean_mfcc
+
+
 # Получение данных
 id_list = os.listdir(data_path)
 
@@ -38,4 +44,5 @@ for person_id in id_list:
 
         mfcc = feature.mfcc(y=audio, sr=sample_rate, n_mfcc=13)
         person_params.append(mfcc)
-    voice_params[person_id] = person_params
+    voice_params[person_id] = average_mfcc(person_params)
+print(voice_params)
