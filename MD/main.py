@@ -1,6 +1,7 @@
+import itertools
 import os
 import random
-from typing import List, Dict
+from typing import List, Dict, Tuple, Optional
 
 import librosa
 from librosa import feature
@@ -9,27 +10,80 @@ import torch.nn.functional as F
 import torch.nn as nn
 import numpy as np
 from torch import optim
-from torch.utils.data import TensorDataset, DataLoader
+from torch.nn.utils.rnn import pad_sequence
+from torch.utils.data import DataLoader, Dataset
 from dotenv import load_dotenv
-from sklearn.model_selection import train_test_split
+import noisereduce as nr
 
-load_dotenv()
-
-data_path = os.environ['DATASET_PATH']
+import clearing_voice.main_project
 
 
-class SpeakerEmbeddingModel(nn.Module):
-    def __init__(self, input_size: int = 40, hidden_size: int = 256, embedding_dim: int = 128):
-        super(SpeakerEmbeddingModel, self).__init__()
-        self.fc1 = nn.Linear(input_size, hidden_size)
-        self.fc2 = nn.Linear(hidden_size, hidden_size)
-        self.fc3 = nn.Linear(hidden_size, embedding_dim)
+class VoiceEmbeddingModel(nn.Module):
+    def __init__(self, input_size: int = 40):
+        super(VoiceEmbeddingModel, self).__init__()
+        self.lstm1 = nn.LSTM(input_size, 128, batch_first=True)
+        self.conv1 = nn.Conv1d(128, 128, 5, padding=2)
+        self.pool = nn.MaxPool1d(2)
+        self.conv2 = nn.Conv1d(128, 128, 5, padding=2)
+        self.flatten = nn.Flatten()
+        self.fc1 = nn.Linear(128 * 16, 256)
+        self.fc2 = nn.Linear(256, 128)  # Предположим, размерность эмбеддинга 128
 
     def forward(self, x):
-        x = F.relu(self.fc1(x))
-        x = F.relu(self.fc2(x))
-        x = self.fc3(x)
+        x, _ = self.lstm1(x)
+        x = x.transpose(1, 2)
+        x = self.pool(nn.functional.relu(self.conv1(x)))
+        x = self.pool(nn.functional.relu(self.conv2(x)))
+        x = self.flatten(x)
+        x = nn.functional.relu(self.fc1(x))
+        x = self.fc2(x)
         return x
+
+
+# class SpeakerEmbeddingModel(nn.Module):
+#     def __init__(self, input_size: int = 40, hidden_size: int = 256, embedding_dim: int = 128):
+#         super(SpeakerEmbeddingModel, self).__init__()
+#         self.fc1 = nn.Linear(input_size, hidden_size)
+#         self.fc2 = nn.Linear(hidden_size, hidden_size)
+#         self.fc3 = nn.Linear(hidden_size, embedding_dim)
+#
+#     def forward(self, x):
+#         x = F.relu(self.fc1(x))
+#         x = F.relu(self.fc2(x))
+#         x = self.fc3(x)
+#         return x
+
+
+class VoicePairsDataset(Dataset):
+    def __init__(self, pairs):
+        self.pairs = pairs
+
+    def __len__(self):
+        return len(self.pairs)
+
+    def __getitem__(self, idx):
+        mfcc1, mfcc2, label = self.pairs[idx]
+        return torch.Tensor(mfcc1).flatten(), torch.Tensor(mfcc2).flatten(), torch.Tensor([label])
+
+    @staticmethod
+    def collate_fn(batch) -> Tuple:
+        mfcc1s, mfcc2s, labels = zip(*batch)
+        mfcc1s_padded = []
+        mfcc2s_padded = []
+
+        # Выравниваем каждую пару по максимальной длине в паре
+        for mfcc1, mfcc2 in zip(mfcc1s, mfcc2s):
+            max_length = max(mfcc1.shape[0], mfcc2.shape[0])
+            mfcc1s_padded.append(
+                F.pad(mfcc1, (0, 0, 0, max_length - mfcc1.shape[0]), "constant", 0))
+            mfcc2s_padded.append(
+                F.pad(mfcc2, (0, 0, 0, max_length - mfcc2.shape[0]), "constant", 0))
+
+        mfcc1s_padded = torch.stack(mfcc1s_padded)
+        mfcc2s_padded = torch.stack(mfcc2s_padded)
+        labels = torch.cat(labels)
+
+        return mfcc1s_padded, mfcc2s_padded, labels
 
 
 class ConstrastiveLoss(nn.Module):
@@ -38,51 +92,32 @@ class ConstrastiveLoss(nn.Module):
         self.margin = margin
 
     def forward(self, output1, output2, label):
-        euclidean_distance = (output1 - output2).pow(2).sum(1)
+        euclidean_distance = F.pairwise_distance(output1, output2)
         loss_contrastive = torch.mean((1 - label) * torch.pow(euclidean_distance, 0.5) +
                                       (label) * torch.pow(
             torch.clamp(self.margin - euclidean_distance, min=0.0), 0.5))
+        loss_contrastive *= 1000
         return loss_contrastive
 
 
-def fit_model(model: nn.Module, input_data: torch.Tensor = None, labels: torch.Tensor = None,
-              loader=None, epoches: int = 10,
-              lr=0.001, batch_size: int = 32, criterion=None):
-    criterion = nn.TripletMarginLoss()
-    optimizer = optim.Adam(model.parameters(), lr=lr)
-    if not loader:
-        dataset = TensorDataset(input_data, labels)
-        loader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
-    for epoch in range(epoches):
-        for data, target in loader:
-            optimizer.zero_grad()
-            output = model(data.float()).squeeze()
-            loss = criterion()
-            loss.backward()
-            optimizer.step()
-        print(f'Epoch {epoch + 1}, Loss: {loss.item()}')
-
-    return model
-
-
-def train_model(model: nn.Module, dataloaders: Dict, criterion, optimizer: optim.Optimizer,
-                num_epochs: int = 25, device: str = 'cuda') -> nn.Module:
+def train_model(model: nn.Module, dataloaders: Dict, criterion, lr=0.001,
+                epoches: int = 25, device: str = 'cuda') -> nn.Module:
     """
     Обучает модель и выводит информацию о процессе обучения.
    :param model: torch.nn.Module -  Модель для обучения.
    :param dataloaders: dict - Словарь содержащий 'train' и 'val' DataLoader.
    :param criterion: torch.nn.modules.loss - Функция потерь.
-   :param optimizer: torch.optim.Optimizer - Оптимизатор.
-   :param num_epochs: int - Количество эпох обучения.
+   :param lr: float
+   :param epoches: int - Количество эпох обучения.
    :param device: str - Устройство для обучения ('cuda' или 'cpu').
     :return: nn.Module - Обученная модель.
     """
     model = model.to(device)
+    optimizer = optim.Adam(model.parameters(), lr=lr)
     best_model_wts = model.state_dict()
     best_acc = 0.0
-
-    for epoch in range(num_epochs):
-        print(f'Epoch {epoch + 1}/{num_epochs}')
+    for epoch in range(epoches):
+        print(f'Epoch {epoch + 1}/{epoches}')
         print('-' * 10)
 
         # Каждая эпоха имеет фазу обучения и валидации
@@ -96,8 +131,9 @@ def train_model(model: nn.Module, dataloaders: Dict, criterion, optimizer: optim
             running_corrects = 0
 
             # Итерация по данным.
-            for inputs, labels in dataloaders[phase]:
-                inputs = inputs.to(device)
+            for inputs1, inputs2, labels in dataloaders[phase]:
+                inputs1 = inputs1.to(device)
+                inputs2 = inputs2.to(device)
                 labels = labels.to(device)
 
                 # Обнуление градиентов параметров
@@ -105,9 +141,9 @@ def train_model(model: nn.Module, dataloaders: Dict, criterion, optimizer: optim
 
                 # Прямой проход
                 with torch.set_grad_enabled(phase == 'train'):
-                    outputs = model(inputs)
-                    _, preds = torch.max(outputs, 1)
-                    loss = criterion(outputs, labels)
+                    outputs1 = model(inputs1)
+                    outputs2 = model(inputs2)
+                    loss = criterion(outputs1, outputs2, labels)
 
                     # Обратное распространение и оптимизация только в фазе обучения
                     if phase == 'train':
@@ -115,8 +151,7 @@ def train_model(model: nn.Module, dataloaders: Dict, criterion, optimizer: optim
                         optimizer.step()
 
                 # Статистика
-                running_loss += loss.item() * inputs.size(0)
-                running_corrects += torch.sum(preds == labels)
+                running_loss += loss.item() * inputs1.size(0)
 
             epoch_loss = running_loss / len(dataloaders[phase].dataset)
             epoch_acc = running_corrects / len(dataloaders[phase].dataset)
@@ -127,9 +162,7 @@ def train_model(model: nn.Module, dataloaders: Dict, criterion, optimizer: optim
             if phase == 'val' and epoch_acc > best_acc:
                 best_acc = epoch_acc
                 best_model_wts = model.state_dict()
-
         print()
-
     print(f'Лучшая точность валидации: {best_acc:.4f}')
 
     # Загрузка лучших весов модели
@@ -151,41 +184,171 @@ def get_audio_for_id(folder: str, id: str) -> List[str]:
     return audiofiles_list
 
 
-def average_mfcc(mfcc_list: List) -> np.ndarray:
-    mfcc_stack = np.hstack(mfcc_list)
-    mean_mfcc = np.mean(mfcc_stack, axis=1)
-    return mean_mfcc
+def preprocess_audio(file_path: str, target_sr: int = 16000, segment_length: float = 1) -> List:
+    """
+    Функция для предобработки аудиозаписей.
+    :param file_path: str - Путь к аудиофайлу.
+    :param target_sr: int - Целевая частота дискретизации.
+    :param segment_length: int - Длина сегмента в секундах.
+    :return: list -  Список сегментов аудиосигнала, каждый из которых является np.array.
+    """
+    # Загрузка аудио файла
+    y, sr = librosa.load(file_path, sr=None)
+
+    # Уменьшение шума
+    y_clean = nr.reduce_noise(y=y, sr=sr)
+
+    # Нормализация амплитуды
+    y_norm = librosa.util.normalize(y_clean)
+
+    # Ресемплинг до целевой частоты дискретизации
+    if sr != target_sr:
+        y_resampled = librosa.resample(y_norm, orig_sr=sr, target_sr=target_sr)
+    else:
+        y_resampled = y_norm
+
+    # Обрезка тихих участков
+    y_trimmed, _ = librosa.effects.trim(y_resampled)
+
+    # Сегментация
+    segment_samples = segment_length * target_sr
+    segments = [y_trimmed[i:i + segment_samples] for i in range(0, len(y_trimmed), segment_samples)
+                if i + segment_samples <= len(y_trimmed)]
+
+    return segments
 
 
-def get_voice_mfccs(audio_path: str, n_mfcc: int = 13) -> np.ndarray:
-    audio, sample_rate = librosa.load(audio_path, sr=None)
-    mfcc = feature.mfcc(y=audio, sr=sample_rate, n_mfcc=n_mfcc)
+# Загрузка аудиофайла
+def load_audio(filename):
+    audio, sr = librosa.load(filename, sr=None)
+    return audio, sr
+
+
+# Вычисление MFCC
+def compute_mfcc(audio, sr, n_mfcc=13):
+    mfcc = librosa.feature.mfcc(y=audio, sr=sr, n_mfcc=n_mfcc)
     return mfcc
 
 
-# Получение данных
-id_list = os.listdir(data_path)
-
-# Получение голосовых признаков
-voice_params = []
-for person_id in id_list:
-    files = get_audio_for_id(data_path, person_id)
-    person_params = []
-    for file in files:
-        voice_params.append((person_id, get_voice_mfccs(file, n_mfcc=15)))
-
-speak_rec = SpeakerEmbeddingModel(15)
-
-random.shuffle(voice_params)
-
-# Создание тензоров
-inputs =[params[1] for params in voice_params]
-labels =[params[0] for params in voice_params]
+# Вычисление спектрограммы
+def compute_spectrogram(audio, sr):
+    stft = np.abs(librosa.stft(audio))
+    spectrogram = librosa.amplitude_to_db(stft, ref=np.max)
+    return spectrogram
 
 
-mfccs_train, mfccs_val, labels_train, labels_val = train_test_split(
-    inputs, labels, test_size=0.2, random_state=42
-)
-# dataset = {'train': }
-speak_rec = train_model(speak_rec, inputs, labels, epoches=10)
-torch.save(speak_rec.state_dict(), f'speak_rec_15_256_128_10epo.pth')
+# Вычисление хромаграммы
+def compute_chromagram(audio, sr):
+    chromagram = librosa.feature.chroma_stft(y=audio, sr=sr)
+    return chromagram
+
+
+# Вычисление zero-crossing rate
+def compute_zcr(audio):
+    zcr = librosa.feature.zero_crossing_rate(audio)[0]
+    return zcr
+
+
+# Вычисление тональности (pitch)
+def compute_pitch(audio, sr):
+    pitches, magnitudes = librosa.piptrack(y=audio, sr=sr)
+    pitch = np.max(pitches, axis=0)
+    return pitch
+
+
+def get_voice_mfccs(audio_path: str, clear: bool = False, clear_output: Optional[str] = None,
+                    n_mfcc: int = 13) -> np.ndarray:
+    if clear:
+        audio, sample_rate = clearing_voice.main_project.clear_audio(audio_path,
+                                                                     output_path=clear_output)
+    else:
+        audio, sample_rate = librosa.load(audio_path, sr=None)
+    mfcc = feature.mfcc(y=audio, sr=sample_rate, n_mfcc=n_mfcc)
+    return mfcc
+
+def get_mfccs(audio, sample_rate: int, n_mfcc: int = 40):
+    return feature.mfcc(y=audio, sr=sample_rate, n_mfcc=n_mfcc)
+
+def create_pairs(data):
+    positive_pairs = []
+    negative_pairs = []
+
+    # Создание позитивных пар
+    for user_id, mfccs in data.items():
+        if len(mfccs) > 1:
+            for mfcc1, mfcc2 in itertools.combinations(mfccs, 2):
+                positive_pairs.append((mfcc1, mfcc2, 1))
+
+    # Создание негативных пар
+    users_pairs = itertools.combinations(data.keys(), 2)
+    for user1, user2 in users_pairs:
+        if data[user1] and data[user2]:
+            mfcc1 = random.choice(data[user1])
+            mfcc2 = random.choice(data[user2])
+            negative_pairs.append((mfcc1, mfcc2, 0))
+
+    return positive_pairs + negative_pairs
+
+
+def create_triplets(data):
+    triplets = []
+
+    # Список всех пользователей для легкого доступа
+    user_ids = list(data.keys())
+
+    # Создание троек
+    for user_id, mfccs in data.items():
+        if len(mfccs) > 1:  # Убедитесь, что у пользователя есть хотя бы два голосовых образца
+            # Выбор всех возможных пар анкер-позитив
+            anchor_positive_pairs = list(itertools.combinations(mfccs, 2))
+            for anchor, positive in anchor_positive_pairs:
+                # Выбор отрицательного примера из другого пользователя
+                negative_user_id = random.choice([uid for uid in user_ids if uid != user_id])
+                # Убедитесь, что у отрицательного пользователя есть голосовые данные
+                if data[negative_user_id]:
+                    negative = random.choice(data[negative_user_id])
+                    triplets.append((anchor, positive, negative))
+
+    return triplets
+
+
+if __name__ == '__main__':
+
+    load_dotenv()
+
+    data_path = r'{}'.format(os.environ['DATASET_PATH'])
+
+    # Получение данных
+    id_list = os.listdir(data_path)
+    batch_size = 32
+    # Получение голосовых признаков
+    voice_params = {}
+    for person_id in id_list:
+        files = get_audio_for_id(data_path, person_id)
+        person_params = []
+        for file in files:
+            person_params.append(get_voice_mfccs(file, n_mfcc=15))
+        voice_params[person_id] = person_params
+        print(f'Person {person_id} saved.')
+
+    data_pairs = create_pairs(voice_params)
+    random.shuffle(data_pairs)
+    # Разделение на обучающую и валидационную выборки
+    val_size = int(0.2 * len(data_pairs))
+    data_train = data_pairs[val_size:]
+    data_val = data_pairs[:val_size]
+
+    dataset_train = VoicePairsDataset(data_train)
+    dataset_val = VoicePairsDataset(data_val)
+    dataloaders = {'train': DataLoader(dataset_train, batch_size=batch_size, shuffle=True),
+                   'val': DataLoader(dataset_val, batch_size=batch_size, shuffle=True)}
+
+    model = VoiceEmbeddingModel()
+    model = train_model(model, dataloaders, ConstrastiveLoss(), epoches=15)
+    torch.save(model.state_dict(), f'speak_rec_15_256_128_10epo.pth')
+
+    # dataset_train = TensorDataset(torch.tensor(mfccs_train), torch.tensor(labels_train))
+    # dataset_val = TensorDataset(torch.tensor(mfccs_val), torch.tensor(labels_val))
+    # dataset = {'train': DataLoader(dataset_train, batch_size=batch_size, shuffle=True),
+    #            'val': DataLoader(dataset_val, batch_size=batch_size, shuffle=True)}
+    # speak_rec = train_model(speak_rec, inputs, labels, epoches=10)
