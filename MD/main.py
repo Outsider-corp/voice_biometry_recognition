@@ -1,7 +1,7 @@
 import itertools
 import os
 import random
-from typing import List, Dict, Tuple, Optional
+from typing import List, Dict, Tuple, Optional, Union
 
 import librosa
 from librosa import feature
@@ -40,18 +40,81 @@ class VoiceEmbeddingModel(nn.Module):
         return x
 
 
-# class SpeakerEmbeddingModel(nn.Module):
-#     def __init__(self, input_size: int = 40, hidden_size: int = 256, embedding_dim: int = 128):
-#         super(SpeakerEmbeddingModel, self).__init__()
-#         self.fc1 = nn.Linear(input_size, hidden_size)
-#         self.fc2 = nn.Linear(hidden_size, hidden_size)
-#         self.fc3 = nn.Linear(hidden_size, embedding_dim)
-#
-#     def forward(self, x):
-#         x = F.relu(self.fc1(x))
-#         x = F.relu(self.fc2(x))
-#         x = self.fc3(x)
-#         return x
+class ResidualBlock(nn.Module):
+    def __init__(self, in_channels, out_channels):
+        super(ResidualBlock, self).__init__()
+        self.conv1 = nn.Conv2d(in_channels, out_channels, kernel_size=3, padding=1)
+        self.conv2 = nn.Conv2d(out_channels, out_channels, kernel_size=3, padding=1)
+        self.bn1 = nn.BatchNorm2d(out_channels)
+        self.bn2 = nn.BatchNorm2d(out_channels)
+
+    def forward(self, x):
+        identity = x
+        out = self.conv1(x)
+        out = F.relu(self.bn1(out))
+        out = self.conv2(out)
+        out = self.bn2(out)
+        out += identity  # Add the residual (skip) connection
+        return F.relu(out)
+
+
+class ResCNN(nn.Module):
+    def __init__(self, in_channels=1):
+        super(ResCNN, self).__init__()
+
+        # Первоначальный свёрточный слой
+        self.conv1 = nn.Conv2d(in_channels, 64, kernel_size=5, stride=2, padding=2)
+        self.bn1 = nn.BatchNorm2d(64)
+
+        # Residual блоки
+        self.res_block1 = ResidualBlock(64, 64)
+        self.res_block2 = ResidualBlock(64, 128)
+        self.res_block3 = ResidualBlock(128, 256)
+        self.res_block4 = ResidualBlock(256, 512)
+
+        # Последующие свёрточные слои
+        self.conv2 = nn.Conv2d(64, 128, kernel_size=5, stride=2, padding=2)
+        self.bn2 = nn.BatchNorm2d(128)
+        self.conv3 = nn.Conv2d(128, 256, kernel_size=5, stride=2, padding=2)
+        self.bn3 = nn.BatchNorm2d(256)
+        self.conv4 = nn.Conv2d(256, 512, kernel_size=5, stride=2, padding=2)
+        self.bn4 = nn.BatchNorm2d(512)
+
+        # Временной пуллинг
+        self.pool = nn.AvgPool2d((1, 1))
+
+        # Полносвязный слой
+        self.fc = nn.Linear(512, 512)
+
+        # Нормализация длины
+        self.ln = nn.BatchNorm1d(512)
+
+    def forward(self, x):
+        # Начальный свёрточный слой
+        x = self.conv1(x)
+        x = F.relu(self.bn1(x))
+
+        # Пропуск через рес-блоки
+        x = self.res_block1(x)
+        x = self.conv2(x)
+        x = F.relu(self.bn2(x))
+        x = self.res_block2(x)
+        x = self.conv3(x)
+        x = F.relu(self.bn3(x))
+        x = self.res_block3(x)
+        x = self.conv4(x)
+        x = F.relu(self.bn4(x))
+        x = self.res_block4(x)
+
+        # Временной пуллинг
+        x = self.pool(x)
+
+        # Полносвязный слой и нормализация длины
+        x = x.view(x.size(0), -1)
+        x = self.fc(x)
+        x = self.ln(x)
+
+        return x
 
 
 class VoicePairsDataset(Dataset):
@@ -184,7 +247,8 @@ def get_audio_for_id(folder: str, id: str) -> List[str]:
     return audiofiles_list
 
 
-def preprocess_audio(file_path: str, target_sr: int = 16000, segment_length: float = 1) -> List:
+def preprocess_audio(file_path: str, target_sr: int = 16000, segment_length: float = 0,
+                     clear: bool = False, clear_output: str = None) -> Union[List[np.ndarray], np.ndarray]:
     """
     Функция для предобработки аудиозаписей.
     :param file_path: str - Путь к аудиофайлу.
@@ -193,7 +257,7 @@ def preprocess_audio(file_path: str, target_sr: int = 16000, segment_length: flo
     :return: list -  Список сегментов аудиосигнала, каждый из которых является np.array.
     """
     # Загрузка аудио файла
-    y, sr = librosa.load(file_path, sr=None)
+    y, sr = get_voice_audio(file_path, clear=clear, clear_output=clear_output)
 
     # Уменьшение шума
     y_clean = nr.reduce_noise(y=y, sr=sr)
@@ -211,11 +275,14 @@ def preprocess_audio(file_path: str, target_sr: int = 16000, segment_length: flo
     y_trimmed, _ = librosa.effects.trim(y_resampled)
 
     # Сегментация
-    segment_samples = segment_length * target_sr
-    segments = [y_trimmed[i:i + segment_samples] for i in range(0, len(y_trimmed), segment_samples)
-                if i + segment_samples <= len(y_trimmed)]
-
-    return segments
+    if segment_length:
+        segment_samples = segment_length * target_sr
+        segments = [y_trimmed[i:i + segment_samples] for i in
+                    range(0, len(y_trimmed), segment_samples)
+                    if i + segment_samples <= len(y_trimmed)]
+        return segments
+    else:
+        return y_trimmed
 
 
 # Загрузка аудиофайла
@@ -256,18 +323,19 @@ def compute_pitch(audio, sr):
     return pitch
 
 
-def get_voice_mfccs(audio_path: str, clear: bool = False, clear_output: Optional[str] = None,
-                    n_mfcc: int = 13) -> np.ndarray:
+def get_voice_audio(audio_path: str, clear: bool = False, clear_output: Optional[str] = None):
     if clear:
         audio, sample_rate = clearing_voice.main_project.clear_audio(audio_path,
                                                                      output_path=clear_output)
     else:
         audio, sample_rate = librosa.load(audio_path, sr=None)
-    mfcc = feature.mfcc(y=audio, sr=sample_rate, n_mfcc=n_mfcc)
-    return mfcc
+    # mfcc = feature.mfcc(y=audio, sr=sample_rate, n_mfcc=n_mfcc)
+    return audio, sample_rate
+
 
 def get_mfccs(audio, sample_rate: int, n_mfcc: int = 40):
     return feature.mfcc(y=audio, sr=sample_rate, n_mfcc=n_mfcc)
+
 
 def create_pairs(data):
     positive_pairs = []
