@@ -248,7 +248,8 @@ def get_audio_for_id(folder: str, id: str) -> List[str]:
 
 
 def preprocess_audio(file_path: str, target_sr: int = 16000, segment_length: float = 0,
-                     clear: bool = False, clear_output: str = None) -> Union[List[np.ndarray], np.ndarray]:
+                     clear: bool = False, clear_output: str = None) -> Union[
+    List[np.ndarray], np.ndarray]:
     """
     Функция для предобработки аудиозаписей.
     :param file_path: str - Путь к аудиофайлу.
@@ -298,7 +299,7 @@ def compute_mfcc(audio, sr, n_mfcc=13):
 
 
 # Вычисление спектрограммы
-def compute_spectrogram(audio, sr):
+def get_spectrogram(audio, sr):
     stft = np.abs(librosa.stft(audio))
     spectrogram = librosa.amplitude_to_db(stft, ref=np.max)
     return spectrogram
@@ -358,24 +359,35 @@ def create_pairs(data):
     return positive_pairs + negative_pairs
 
 
-def create_triplets(data):
+def create_triplets(data, count_x_data: int = 50):
     triplets = []
 
     # Список всех пользователей для легкого доступа
     user_ids = list(data.keys())
 
+    pair_for_user = {user_id: list(itertools.combinations(mfccs, 2)) for user_id, mfccs in
+                     data.items() if len(mfccs) > 1}
+    total_pairs = sum([len(x) for x in pair_for_user.values()])
+    user_weights = [len(pair_for_user[uid]) for uid in user_ids if uid in pair_for_user]
+
+    desired_triplets_count = total_pairs * count_x_data
+
     # Создание троек
-    for user_id, mfccs in data.items():
-        if len(mfccs) > 1:  # Убедитесь, что у пользователя есть хотя бы два голосовых образца
-            # Выбор всех возможных пар анкер-позитив
-            anchor_positive_pairs = list(itertools.combinations(mfccs, 2))
-            for anchor, positive in anchor_positive_pairs:
-                # Выбор отрицательного примера из другого пользователя
-                negative_user_id = random.choice([uid for uid in user_ids if uid != user_id])
-                # Убедитесь, что у отрицательного пользователя есть голосовые данные
-                if data[negative_user_id]:
-                    negative = random.choice(data[negative_user_id])
-                    triplets.append((anchor, positive, negative))
+    while len(triplets) < desired_triplets_count:
+        chosen_user_id = random.choices([uid for uid in user_ids if uid in pair_for_user],
+                                        weights=user_weights,
+                                        k=1)[0]
+        mfccs = data[chosen_user_id]
+
+        # Создаем все возможные пары анкер-позитив и выбираем одну случайную пару
+        anchor_positive_pairs = list(itertools.combinations(mfccs, 2))
+        anchor, positive = random.choice(anchor_positive_pairs)
+
+        other_users = [uid for uid in user_ids if uid != chosen_user_id and data[uid]]
+        if other_users:
+            negative_user_id = random.choice(other_users)
+            negative = random.choice(data[negative_user_id])
+            triplets.append((anchor, positive, negative))
 
     return triplets
 

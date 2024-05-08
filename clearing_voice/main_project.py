@@ -98,8 +98,8 @@ def main():
 
 
 def main2():
-    audio_file = r'voices/rad3.ogg'
-    clear_audio(audio_file, 'output/rad3__clear.wav')
+    audio_file = r'D:\University\Диссерт\test_data_01\id10001\1zcIwhmdeo4\00001.wav'
+    clear_audio(audio_file, r'00001.wav')
 
     # audio, fs = get_audio(audio_file)
     # audio_supp = outlier_suppression(audio, fs)
@@ -478,4 +478,4 @@ def compress_audio(audio: np.ndarray, phrases: List[Dict]):
 
 
 if __name__ == '__main__':
-    main_old()
+    main2()
