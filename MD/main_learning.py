@@ -28,7 +28,7 @@ model_params = {"persons_count": 100,
 #         'rb') as f:
 #     voice_params_mfcc = pickle.load(f)
 
-with open(f'voice_params/v1_voice_params_100pers_10vox_mfcc.pkl', 'rb') as f:
+with open(f'voice_params/v2_voice_params_100pers_5vox_mfcc.pkl', 'rb') as f:
     voice_params_mfcc = pickle.load(f)
 
 ver = '011'
