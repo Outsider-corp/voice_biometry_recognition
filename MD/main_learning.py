@@ -10,7 +10,7 @@ from MD.parts.train_funcs import train_model_pair, train_model_triplet
 os.chdir(r'D:\Py_Projects\neuro')
 
 model_params = {"persons_count": 100,
-                "max_voices": 10,
+                "max_voices": 5,
                 "mfcc_count": 20,
                 "batch_size": 16,
                 "target_sr": 16000,
@@ -28,10 +28,10 @@ model_params = {"persons_count": 100,
 #         'rb') as f:
 #     voice_params_mfcc = pickle.load(f)
 
-with open(f'voice_params/v1_voice_params_100pers_10vox_mfcc.pkl', 'rb') as f:
+with open(f'voice_params/v2_voice_params_100pers_5vox_mfcc.pkl', 'rb') as f:
     voice_params_mfcc = pickle.load(f)
 
-ver = '011'
+ver = '100'
 model_name = (f'DeepSpeaker_{model_params["persons_count"]}pers'
               f'_{model_params["max_voices"]}vox_{model_params["mfcc_count"]}'
               f'mfcc_tripl_{ver}')

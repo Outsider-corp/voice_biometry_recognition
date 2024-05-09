@@ -74,25 +74,19 @@ class VoiceTripletsDataset(Dataset):
 
     def __getitem__(self, idx):
         mfcc1, mfcc2, mfcc3 = self.triplets[idx]
-        return (torch.tensor(mfcc1).t(),
-                torch.tensor(mfcc2).t(),
-                torch.tensor(mfcc3).t())
+        # mfcc1 = torch.tensor(mfcc1, device='cuda').float()
+        # mfcc2 = torch.tensor(mfcc2, device='cuda').float()
+        # mfcc3 = torch.tensor(mfcc3, device='cuda').float()
+        return mfcc1, mfcc2, mfcc3
 
     @staticmethod
     def collate_fn(batch) -> Tuple:
         mfcc1s, mfcc2s, mfcc3s = zip(*batch)
-        mfcc1s_padded = pad_sequence(mfcc1s,
-                                     batch_first=True,
-                                     padding_value=0).transpose(1, 2).unsqueeze(1)
-        mfcc2s_padded = pad_sequence(mfcc2s,
-                                     batch_first=True,
-                                     padding_value=0).transpose(1, 2).unsqueeze(1)
-        mfcc3s_padded = pad_sequence(mfcc3s,
-                                     batch_first=True,
-                                     padding_value=0).transpose(1, 2).unsqueeze(1)
+        # mfcc1s_padded = pad_sequence(mfcc1s, batch_first=True, padding_value=0)
+        # mfcc2s_padded = pad_sequence(mfcc2s, batch_first=True, padding_value=0)
+        # mfcc3s_padded = pad_sequence(mfcc3s, batch_first=True, padding_value=0)
 
-
-        return mfcc1s_padded, mfcc2s_padded, mfcc3s_padded
+        return mfcc1s, mfcc2s, mfcc3s
 
 
 def create_pair_dataset(voice_params, model_params):
@@ -128,7 +122,8 @@ def create_triplets_dataset(voice_params, model_params, count_x_data: int = 2):
     dataloader_train = DataLoader(dataset_train, batch_size=model_params['batch_size'],
                                   shuffle=True,
                                   collate_fn=VoiceTripletsDataset.collate_fn)
-    dataloader_val = DataLoader(dataset_val, batch_size=model_params['batch_size'], shuffle=True,
+    dataloader_val = DataLoader(dataset_val, batch_size=model_params['batch_size'],
+                                shuffle=True,
                                 collate_fn=VoiceTripletsDataset.collate_fn)
     dataloaders = {'train': dataloader_train,
                    'val': dataloader_val}

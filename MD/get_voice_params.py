@@ -4,11 +4,13 @@ import pickle
 from typing import List
 
 import librosa
+import torchaudio
 from dotenv import load_dotenv
 import numpy as np
 from librosa import feature
 
 from MD.parts.clear_audio_new import clear_audio, clear_audio_newest
+from MD.parts.torchaudio_clear import preprocess_audio, compute_mfcc_features
 
 
 def get_audio_for_id(folder: str, id: str) -> List[str]:
@@ -46,7 +48,7 @@ data_path = r'{}'.format(os.environ['DATASET_PATH'])
 id_list = os.listdir(data_path)
 
 model_params = {"persons_count": 100,
-                "max_voices": 10,
+                "max_voices": 5,
                 "mfcc_count": 20,
                 "batch_size": 16,
                 "target_sr": 16000,
@@ -56,7 +58,7 @@ model_params = {"persons_count": 100,
                 "n_mels": 40,
                 "lr": 1e-3,
                 "margin_triplet": 0.3}
-params_name = 'v1'
+params_name = 'v2'
 # Получение голосовых признаков
 voice_params_mfcc = {}
 voice_params_spectro = {}
@@ -68,32 +70,22 @@ for person_id in id_list:
     person_params_spectro = []
     voice_cnt = 0
     for file in files:
-        # good_audio, good_audio_segm = clear_audio(file, target_sr=model_params['target_sr'],
-        #                                           segment_length=model_params['segment_length'])
-        good_audio = clear_audio_newest(file, target_sr=model_params['target_sr'],
-                                        n_fft=model_params['n_fft'],
-                                        hop_length=model_params['hop_length'])
-        good_audio_segm = None
-        if good_audio_segm is not None:
-            person_params_mfcc.extend(
-                [get_mfccs(audio, sample_rate=model_params['target_sr'],
-                           n_mfcc=model_params['mfcc_count'],
-                           n_fft=model_params['n_fft']) for
-                 audio in good_audio_segm])
-            # person_params_mfcc.extend(
-            #     [get_spectrogram(audio, target_sr) for audio in good_audio])
-        else:
-            person_params_mfcc.append(
-                get_mfccs(good_audio, sample_rate=model_params['target_sr'],
-                          n_mfcc=model_params['mfcc_count'], n_fft=model_params['n_fft'],
-                          hop_length=model_params['hop_length'], n_mels=model_params['n_mels']))
-        person_params_spectro.append(get_spectrogram(good_audio, model_params['target_sr'],
-                                                     n_fft=model_params['n_fft']))
+        good_audio = preprocess_audio(file, target_sample_rate=model_params['target_sr'])
+        torchaudio.save(f'output/saved/{person_id}_{voice_cnt}.wav', good_audio, model_params['target_sr'])
+        person_params_mfcc.append(compute_mfcc_features(good_audio,
+                                                        sample_rate=model_params['target_sr'],
+                                                        n_mfcc=model_params['mfcc_count'],
+                                                        n_fft=model_params['n_fft'],
+                                                        hop_length=model_params['hop_length'],
+                                                        n_mels=model_params['n_mels'],
+                                                        win_length=400))
+        # person_params_spectro.append(get_spectrogram(good_audio, model_params['target_sr'],
+        #                                              n_fft=model_params['n_fft']))
         voice_cnt += 1
         if voice_cnt > model_params['max_voices']:
             break
     voice_params_mfcc[person_id] = person_params_mfcc
-    voice_params_spectro[person_id] = person_params_spectro
+    # voice_params_spectro[person_id] = person_params_spectro
     print(f'Person {person_id} saved.')
     pers_i += 1
     if pers_i >= model_params['persons_count']:
@@ -102,8 +94,8 @@ with open(os.path.join('voice_params',
                        f'{params_name}_{pickle_file}_mfcc.pkl'),
           'wb') as f:
     pickle.dump(voice_params_mfcc, f)
-with open(os.path.join('voice_params', f'{params_name}_{pickle_file}_spectro.pkl'), 'wb') as f:
-    pickle.dump(voice_params_spectro, f)
+# with open(os.path.join('voice_params', f'{params_name}_{pickle_file}_spectro.pkl'), 'wb') as f:
+#     pickle.dump(voice_params_spectro, f)
 
 json.dump(model_params,
           open(os.path.join('voice_params', f'{params_name}_{pickle_file}.json'), 'w'))

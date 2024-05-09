@@ -1,6 +1,7 @@
 import torch
 import torchaudio
 import torchaudio.transforms as T
+import numpy as np
 
 
 def load_audio(audio_file, target_sample_rate):
@@ -42,7 +43,13 @@ def apply_vad(waveform, sample_rate):
     return voiced_frames
 
 
+def normalize_audio(audio):
+    audio = audio / torch.max(torch.abs(audio))
+    return audio
+
+
 def preprocess_audio(audio_file, target_sample_rate):
     waveform, sample_rate = load_audio(audio_file, target_sample_rate)
+    waveform = normalize_audio(waveform)
     voiced_waveform = apply_vad(waveform, sample_rate)
     return voiced_waveform
