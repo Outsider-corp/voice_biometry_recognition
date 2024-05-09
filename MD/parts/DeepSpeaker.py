@@ -17,17 +17,18 @@ class ResBlock(nn.Module):
         self.conv = nn.Conv2d(filters, filters, kernel_size=3, padding=1)
         self.clipped_relu = ClippedReLU(max_value=20)
         self.bn = nn.BatchNorm2d(filters)
-        self.identity = nn.Identity()
+        # self.identity = nn.Identity()
 
     def forward(self, x):
-        x = self.conv(x)
-        x = self.clipped_relu(self.bn(x))
-        x = self.conv(x)
-        x = self.bn(x)
-        x = self.clipped_relu(x)
-        x = self.identity(x)  # Add the residual (skip) connection
-        out = self.clipped_relu(x)
-        return F.relu(out)
+        identity = x
+        out = self.conv(x)
+        out = self.clipped_relu(self.bn(out))
+        out = self.conv(out)
+        out = self.bn(out)
+        # x = self.identity(x)  # Add the residual (skip) connection
+        out += identity
+        out = self.clipped_relu(out)
+        return out
 
 
 class ConvResBlock(nn.Module):
@@ -50,7 +51,7 @@ class ConvResBlock(nn.Module):
 
 
 class DeepSpeakerModel(nn.Module):
-    def __init__(self, include_softmax=False):
+    def __init__(self, include_softmax: bool = False, num_classes: int = 100):
         super(DeepSpeakerModel, self).__init__()
         self.include_softmax = include_softmax
 
@@ -66,6 +67,7 @@ class DeepSpeakerModel(nn.Module):
         self.dense1 = nn.Linear(512, 512)
         if include_softmax:
             self.dropout = nn.Dropout(0.5)
+            self.classifier = nn.Linear(512, num_classes)
         else:
             self.norm = lambda x: F.normalize(x, p=2, dim=1)
 
@@ -76,15 +78,12 @@ class DeepSpeakerModel(nn.Module):
         x = self.conv4(x)
         x = self.adaptive_avg_pool(x)
 
-        # x = x.view(-1, 2048)
-
         x = self.flatten(x)
-        # x = torch.mean(x, dim=1)
-
         x = self.dense1(x)
+
         if self.include_softmax:
             x = self.dropout(x)
-            x = self.output(x)
+            x = self.classifier(x)
             x = F.softmax(x, dim=1)
         else:
             x = self.norm(x)

@@ -358,6 +358,28 @@ def create_pairs(data):
 
     return positive_pairs + negative_pairs
 
+def create_balanced_pairs(data, max_pairs_per_user=10):
+    positive_pairs = []
+    negative_pairs = []
+
+    # Создание позитивных пар
+    for user_id, mfccs in data.items():
+        if len(mfccs) > 1:
+            for mfcc1, mfcc2 in itertools.combinations(mfccs, 2):
+                positive_pairs.append((mfcc1, mfcc2, 1))
+                if len(positive_pairs) >= max_pairs_per_user:
+                    break
+
+    # Создание негативных пар
+    all_users = list(data.keys())
+    for _ in range(len(positive_pairs)):  # Балансировка количества негативных пар
+        user1, user2 = np.random.choice(all_users, 2, replace=False)
+        if data[user1] and data[user2]:
+            mfcc1 = random.choice(data[user1])
+            mfcc2 = random.choice(data[user2])
+            negative_pairs.append((mfcc1, mfcc2, 0))
+
+    return positive_pairs + negative_pairs
 
 def create_triplets(data, count_x_data: int = 50):
     triplets = []

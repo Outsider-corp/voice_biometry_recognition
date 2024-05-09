@@ -39,13 +39,13 @@ def resample_audio(audio, sr, target_sr=16000):
     return audio, sr
 
 
-def segment_audio(audio, sr, segment_length=5) -> List[List[int]]:
-    buffer = segment_length * sr
+def segment_audio(audio, sr, segment_length: float = 5) -> List[List[int]]:
+    buffer = int(segment_length * sr)
     segments = [audio[i:i + buffer] for i in range(0, len(audio), buffer)][:-1]
     return segments
 
 
-def clear_audio(file_path: str, target_sr: int = 16000, segment_length: int = 5,
+def clear_audio(file_path: str, target_sr: int = 16000, segment_length: float = 5,
                 save_full_audio_path: Union[str, None] = None) -> Tuple[
     np.ndarray, Union[List[List[int]], None]]:
     audio, sr = librosa.load(file_path, sr=None)
@@ -58,6 +58,30 @@ def clear_audio(file_path: str, target_sr: int = 16000, segment_length: int = 5,
         sf.write(f'{save_full_audio_path}.wav', audio, sr)
     segments = segment_audio(audio, sr, segment_length=segment_length) if segment_length else None
     return audio, segments
+
+
+def clear_audio_newest(file_path: str, target_sr: int = 16000,
+                       save_full_audio_path: Union[str, None] = None, n_fft: int = 512,
+                       hop_length: int = 512) -> Tuple[
+    np.ndarray, Union[List[List[int]], None]]:
+    audio, sr = librosa.load(file_path, sr=None)
+    # Предварительная обработка
+    audio = butter_bandpass_filter(audio, 300, 3400, sr)
+    audio = normalize_audio(audio)
+    audio = remove_silence(audio, sr)
+    audio, sr = resample_audio(audio, sr, target_sr=target_sr)
+    if save_full_audio_path is not None:
+        sf.write(f'{save_full_audio_path}.wav', audio, sr)
+    if len(audio) < n_fft:
+        pad_length = n_fft - len(audio)
+        signal = np.pad(audio, (0, pad_length), mode='reflect')
+
+        # Применение окна Хэмминга к каждому фрейму
+    window = np.hamming(n_fft)
+    padded_signal = np.pad(audio, int(n_fft // 2), mode='reflect')
+    framed_signal = librosa.util.frame(padded_signal, frame_length=n_fft, hop_length=hop_length)
+    windowed_signal = framed_signal * window[:, None]
+    return windowed_signal.reshape(-1)
 
 
 if __name__ == '__main__':
