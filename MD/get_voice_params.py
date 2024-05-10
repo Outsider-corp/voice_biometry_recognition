@@ -16,7 +16,7 @@ id_list = os.listdir(data_path)
 
 model_params = {'persons_count': 100,
                 'max_voices': 5,
-                'mfcc_count': 20,
+                'mfcc_count': 40,
                 'batch_size': 16,
                 'target_sr': 16000,
                 'n_fft': 1024,
@@ -24,7 +24,7 @@ model_params = {'persons_count': 100,
                 'n_mels': 40,
                 'lr': 0.001,
                 'margin_triplet': 0.3}
-params_name = 'v3'
+params_name = 'v5'
 # Получение голосовых признаков
 voice_params_mfcc = {}
 voice_params_spectro = {}
@@ -36,7 +36,8 @@ for person_id in id_list:
     person_params_spectro = []
     voice_cnt = 0
     for file in files:
-        spectro = get_features_from_file(file, model_params, spectrogram=True)
+        mfcc, spectro = get_features_from_file(file, model_params, mfcc=True, spectrogram=True)
+        person_params_mfcc.append(mfcc)
         person_params_spectro.append(spectro)
         voice_cnt += 1
         if voice_cnt > model_params['max_voices']:
@@ -47,9 +48,9 @@ for person_id in id_list:
     pers_i += 1
     if pers_i >= model_params['persons_count']:
         break
-# with open(os.path.join('voice_params',
-#                        f'{params_name}_{pickle_file}_mfcc.pkl'), 'wb') as f:
-#     pickle.dump(voice_params_mfcc, f)
+with open(os.path.join('voice_params',
+                       f'{params_name}_{pickle_file}_mfcc.pkl'), 'wb') as f:
+    pickle.dump(voice_params_mfcc, f)
 with open(os.path.join('voice_params', f'{params_name}_{pickle_file}_spectro.pkl'), 'wb') as f:
     pickle.dump(voice_params_spectro, f)
 

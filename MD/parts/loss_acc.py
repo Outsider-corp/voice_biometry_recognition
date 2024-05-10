@@ -27,7 +27,7 @@ class TripletLoss(nn.Module):
         losses = F.relu(self.margin - (positive_distance - negative_distance))
 
         incorrect_predictions = (losses > 0).float().sum()/anchor.size(0)*100
-        return losses.mean(), incorrect_predictions
+        return losses.mean(), float(incorrect_predictions)
 
 
 def cosine_similarity_triplet(vec1, vec2):

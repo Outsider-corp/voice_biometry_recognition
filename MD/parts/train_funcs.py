@@ -70,7 +70,6 @@ def train_model_triplet(model: nn.Module, dataloaders: Dict,
         # Каждая эпоха имеет фазу обучения и валидации
         for phase in ['train', 'val']:
             if phase == 'train':
-                continue
                 model.train()  # Установка модели в режим обучения
             else:
                 model.eval()  # Установка модели в режим оценки

@@ -6,33 +6,36 @@ import numpy as np
 import torch
 from torch.utils.data import DataLoader, Dataset
 from torch.nn.utils.rnn import pad_sequence
+import os
+from PIL import Image
+from torchvision.transforms import transforms
 
 
-class PreTrainDataset(Dataset):
-    def __init__(self, data_dict):
-        self.speakers = list(data_dict.keys())
-        self.features = []  # список всех MFCC признаков
-        self.labels = []  # список меток классов
 
-        for key in data_dict:
-            self.features.extend(data_dict[key])
-            self.labels.extend([int(key[-3:]) - 1] * len(data_dict[key]))
+class UserSpectrogramDataset(Dataset):
+    def __init__(self, data_dict, transform=None):
+        """
+        Args:
+            data_dict (dict): Словарь, где ключи — номера пользователей, а значения — списки спектрограмм.
+            transform (callable, optional): Опциональное преобразование, применяемое к каждой спектрограмме.
+        """
+        self.user_ids = []  # Список идентификаторов пользователей
+        self.spectrograms = []  # Список спектрограмм
+        for user_id, spectrograms in data_dict.items():
+            for spectrogram in spectrograms:
+                self.user_ids.append(user_id)
+                self.spectrograms.append(spectrogram)
+        self.transform = transform
 
     def __len__(self):
-        return len(self.labels)
+        return len(self.spectrograms)
 
-    def __getitem__(self, index):
-        return torch.tensor(self.features[index],
-                            dtype=torch.float32).squeeze().t(), self.labels[index]
-
-    @staticmethod
-    def collate_fn(batch):
-        mfccs, labels = zip(*batch)
-        # Преобразуем каждый элемент mfccs в тензор, добавляем размерность канала и корректируем размерности
-        # Нужно убедиться, что размерности соответствуют (batch_size, channels, height, width)
-        mfccs_padded = pad_sequence(mfccs, batch_first=True, padding_value=0).transpose(1, 2).unsqueeze(1)
-        labels = torch.tensor(labels, dtype=torch.long)
-        return mfccs_padded, labels
+    def __getitem__(self, idx):
+        spectrogram = self.spectrograms[idx]
+        user_id = self.user_ids[idx]
+        if self.transform:
+            spectrogram = self.transform(spectrogram)
+        return spectrogram, user_id
 
 
 class VoicePairsDataset(Dataset):
@@ -92,7 +95,9 @@ class VoiceTripletsTDNNDataset(Dataset):
     def __getitem__(self, idx):
         mfcc1, mfcc2, mfcc3 = self.triplets[idx]
         # Переворачиваем размерности сразу здесь, так что последовательность идёт первой, а MFCC второй
-        return mfcc1.squeeze(0).t(), mfcc2.squeeze(0).t(), mfcc3.squeeze(0).t()
+        return (torch.tensor(mfcc1, dtype=torch.float32).squeeze(0).t(),
+                torch.tensor(mfcc2, dtype=torch.float32).squeeze(0).t(),
+                torch.tensor(mfcc3, dtype=torch.float32).squeeze(0).t())
 
     @staticmethod
     def collate_fn(batch) -> Tuple:
@@ -225,3 +230,19 @@ def create_triplets(data, count_x_data: int = 50):
             triplets.append((anchor, positive, negative))
 
     return triplets
+
+
+def create_spectr_dataset(data, batch_size: int = 32):
+    # Определение трансформаций
+    transform = transforms.Compose([
+        transforms.Resize((224, 224)),
+        transforms.ToTensor(),
+        transforms.Normalize(mean=[0.485], std=[0.229])
+        # Нормализация для одноканальных изображений
+    ])
+
+    # Создание DataLoader
+    dataset = UserSpectrogramDataset(data, transform=transform)
+    dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
+
+    return dataloader
