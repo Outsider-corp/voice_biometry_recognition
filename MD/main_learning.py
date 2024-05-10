@@ -6,20 +6,21 @@ import torch
 from MD.parts.DeepSpeaker import DeepSpeakerModel
 from MD.parts.datasets import create_pair_dataset, create_triplets_dataset
 from MD.parts.train_funcs import train_model_pair, train_model_triplet
+from speechnas.network.dtdnnss_base import DtdnnssBase
+from speechnas.network.dtdnnss_searched import DtdnnssBase_v1
 
 os.chdir(r'D:\Py_Projects\neuro')
 
-model_params = {"persons_count": 100,
-                "max_voices": 10,
-                "mfcc_count": 20,
-                "batch_size": 16,
-                "target_sr": 16000,
-                "segment_length": 0.025,
-                "n_fft": 1024,
-                "hop_length": 512,
-                "n_mels": 40,
-                "lr": 1e-3,
-                "margin_triplet": 0.3}
+model_params = {'persons_count': 100,
+                'max_voices': 5,
+                'mfcc_count': 20,
+                'batch_size': 16,
+                'target_sr': 16000,
+                'n_fft': 1024,
+                'hop_length': 512,
+                'n_mels': 40,
+                'lr': 0.001,
+                'margin_triplet': 0.3}
 
 # with open(
 #         f'voice_params/voice_params_{model_params["persons_count"]}pers'
@@ -28,7 +29,7 @@ model_params = {"persons_count": 100,
 #         'rb') as f:
 #     voice_params_mfcc = pickle.load(f)
 
-with open(f'voice_params/v2_voice_params_100pers_5vox_mfcc.pkl', 'rb') as f:
+with open(f'voice_params/v3_voice_params_100pers_5vox_mfcc.pkl', 'rb') as f:
     voice_params_mfcc = pickle.load(f)
 
 ver = '011'
@@ -38,9 +39,11 @@ model_name = (f'DeepSpeaker_{model_params["persons_count"]}pers'
 with open(os.path.join('models', f'params_{model_name}.json'), 'w') as f:
     model_params.update({"epoches": 100})
     json.dump(model_params, f)
-model = DeepSpeakerModel().float()
+model = DtdnnssBase(num_class=7232, feature_dim=128).float()
+# print( sum(p.numel() for p in model.parameters() if p.requires_grad) )
 stat = None
-# model.load_state_dict(torch.load(os.path.join('models', f'DeepSpeaker_100pers_5vox_20mfcc_tripl_002_epo20.pth')))
+
+# model.load_state_dict(state_dict, strict=False)
 # stat = json.load(open(os.path.join('models', f'DeepSpeaker_100pers_5vox_20mfcc_tripl_002_epo20.json')))
 dataloaders = create_triplets_dataset(voice_params_mfcc, model_params, 2)
 model, stat = train_model_triplet(model, dataloaders,

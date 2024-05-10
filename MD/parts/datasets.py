@@ -23,16 +23,14 @@ class PreTrainDataset(Dataset):
 
     def __getitem__(self, index):
         return torch.tensor(self.features[index],
-                            dtype=torch.float32).transpose(0, 1).unsqueeze(1), self.labels[index]
+                            dtype=torch.float32).squeeze().t(), self.labels[index]
 
     @staticmethod
     def collate_fn(batch):
         mfccs, labels = zip(*batch)
         # Преобразуем каждый элемент mfccs в тензор, добавляем размерность канала и корректируем размерности
         # Нужно убедиться, что размерности соответствуют (batch_size, channels, height, width)
-        mfccs_padded = pad_sequence(mfccs, batch_first=True, padding_value=0)
-        # Меняем местами размерности, чтобы высота была 20 (количество MFCC коэффициентов), а ширина - количество временных шагов
-        mfccs_padded = mfccs_padded.permute(0, 2, 3, 1)
+        mfccs_padded = pad_sequence(mfccs, batch_first=True, padding_value=0).transpose(1, 2).unsqueeze(1)
         labels = torch.tensor(labels, dtype=torch.long)
         return mfccs_padded, labels
 
@@ -74,22 +72,38 @@ class VoiceTripletsDataset(Dataset):
 
     def __getitem__(self, idx):
         mfcc1, mfcc2, mfcc3 = self.triplets[idx]
-        # mfcc1 = torch.tensor(mfcc1, device='cuda').float()
-        # mfcc2 = torch.tensor(mfcc2, device='cuda').float()
-        # mfcc3 = torch.tensor(mfcc3, device='cuda').float()
-        return mfcc1.unsqueeze(1), mfcc2.unsqueeze(1), mfcc3.unsqueeze(1)
+        return mfcc1.squeeze(0).t(), mfcc2.squeeze(0).t(), mfcc3.squeeze(0).t()
 
     @staticmethod
     def collate_fn(batch) -> Tuple:
         mfcc1s, mfcc2s, mfcc3s = zip(*batch)
-        mfcc1s_padded = pad_sequence(mfcc1s, batch_first=True, padding_value=0)
-        mfcc2s_padded = pad_sequence(mfcc2s, batch_first=True, padding_value=0)
-        mfcc3s_padded = pad_sequence(mfcc3s, batch_first=True, padding_value=0)
-        # mfcc1s_padded = torch.stack(mfcc1s).unsqueeze(1)
-        # mfcc2s_padded = torch.stack(mfcc2s).unsqueeze(1)
-        # mfcc3s_padded = torch.stack(mfcc3s).unsqueeze(1)
+        mfcc1s_padded = pad_sequence(mfcc1s, batch_first=True, padding_value=0).transpose(1, 2).unsqueeze(1)
+        mfcc2s_padded = pad_sequence(mfcc2s, batch_first=True, padding_value=0).transpose(1, 2).unsqueeze(1)
+        mfcc3s_padded = pad_sequence(mfcc3s, batch_first=True, padding_value=0).transpose(1, 2).unsqueeze(1)
         return mfcc1s_padded, mfcc2s_padded, mfcc3s_padded
 
+class VoiceTripletsTDNNDataset(Dataset):
+    def __init__(self, pairs):
+        self.triplets = pairs
+
+    def __len__(self):
+        return len(self.triplets)
+
+    def __getitem__(self, idx):
+        mfcc1, mfcc2, mfcc3 = self.triplets[idx]
+        # Переворачиваем размерности сразу здесь, так что последовательность идёт первой, а MFCC второй
+        return mfcc1.squeeze(0).t(), mfcc2.squeeze(0).t(), mfcc3.squeeze(0).t()
+
+    @staticmethod
+    def collate_fn(batch) -> Tuple:
+        mfcc1s, mfcc2s, mfcc3s = zip(*batch)
+        # Используем pad_sequence для создания паддинга, и устанавливаем batch_first=True
+        # Не нужно переставлять размерности так, как было предложено
+        mfcc1s_padded = pad_sequence(mfcc1s, batch_first=True, padding_value=0).permute(0, 2, 1)
+        mfcc2s_padded = pad_sequence(mfcc2s, batch_first=True, padding_value=0).permute(0, 2, 1)
+        mfcc3s_padded = pad_sequence(mfcc3s, batch_first=True, padding_value=0).permute(0, 2, 1)
+        # Нужно изменить форму тензоров, чтобы коэффициенты MFCC были в каналах
+        return mfcc1s_padded, mfcc2s_padded, mfcc3s_padded
 
 def create_pair_dataset(voice_params, model_params):
     data_pairs = create_pairs(voice_params)
@@ -112,6 +126,8 @@ def create_pair_dataset(voice_params, model_params):
 
 
 def create_triplets_dataset(voice_params, model_params, count_x_data: int = 2):
+    dataset_class = VoiceTripletsTDNNDataset
+
     data_pairs = create_triplets(voice_params, count_x_data)
     random.shuffle(data_pairs)
     # Разделение на обучающую и валидационную выборки
@@ -119,14 +135,14 @@ def create_triplets_dataset(voice_params, model_params, count_x_data: int = 2):
     data_train = data_pairs[val_size:]
     data_val = data_pairs[:val_size]
 
-    dataset_train = VoiceTripletsDataset(data_train)
-    dataset_val = VoiceTripletsDataset(data_val)
+    dataset_train = dataset_class(data_train)
+    dataset_val = dataset_class(data_val)
     dataloader_train = DataLoader(dataset_train, batch_size=model_params['batch_size'],
                                   shuffle=True,
-                                  collate_fn=VoiceTripletsDataset.collate_fn)
+                                  collate_fn=dataset_class.collate_fn)
     dataloader_val = DataLoader(dataset_val, batch_size=model_params['batch_size'],
                                 shuffle=True,
-                                collate_fn=VoiceTripletsDataset.collate_fn)
+                                collate_fn=dataset_class.collate_fn)
     dataloaders = {'train': dataloader_train,
                    'val': dataloader_val}
 

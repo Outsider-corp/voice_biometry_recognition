@@ -70,12 +70,14 @@ def train_model_triplet(model: nn.Module, dataloaders: Dict,
         # Каждая эпоха имеет фазу обучения и валидации
         for phase in ['train', 'val']:
             if phase == 'train':
+                continue
                 model.train()  # Установка модели в режим обучения
             else:
                 model.eval()  # Установка модели в режим оценки
 
             running_loss = 0.0
             running_corrects = 0
+            running_loss_perc = 0.0
 
             # Итерация по данным.
             for inputs1, inputs2, inputs3 in dataloaders[phase]:
@@ -91,7 +93,7 @@ def train_model_triplet(model: nn.Module, dataloaders: Dict,
                     outputs1 = model(inputs1)
                     outputs2 = model(inputs2)
                     outputs3 = model(inputs3)
-                    loss = criterion(outputs1, outputs2, outputs3)
+                    loss, loss_perc = criterion(outputs1, outputs2, outputs3)
 
                     # Обратное распространение и оптимизация только в фазе обучения
                     if phase == 'train':
@@ -100,12 +102,21 @@ def train_model_triplet(model: nn.Module, dataloaders: Dict,
                 acc = triplet_accuracy(outputs1, outputs2, outputs3, margin)
                 # Статистика
                 running_loss += loss.item() * inputs1.size(0)
+                running_loss_perc += loss_perc
                 running_corrects += acc.item() * inputs1.size(0)
 
             epoch_loss = running_loss / len(dataloaders[phase].dataset)
             epoch_acc = running_corrects / len(dataloaders[phase].dataset)
-            stat[f'{epoch}'] = {f'epoch_loss_{phase}': epoch_loss,
-                                f'epoch_acc_{phase}': epoch_acc}
+            epoch_loss_perc = running_loss_perc / len(dataloaders[phase].dataset)
+            if f'{epoch}' not in stat:
+                stat[f'{epoch}'] = {f'epoch_loss_{phase}': epoch_loss,
+                                    f'epoch_acc_{phase}': epoch_acc,
+                                    f'epoch_loss_perc_{phase}': epoch_loss_perc}
+            else:
+                stat[f'{epoch}'].update({f'epoch_loss_{phase}': epoch_loss,
+                                         f'epoch_acc_{phase}': epoch_acc,
+                                         f'epoch_loss_perc_{phase}': epoch_loss_perc})
+
             print(f'{phase} Loss: {epoch_loss:.4f} Acc: {epoch_acc:.4f}')
 
             # Копирование модели, если она показала лучшую точность

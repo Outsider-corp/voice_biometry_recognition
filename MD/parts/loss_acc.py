@@ -25,7 +25,9 @@ class TripletLoss(nn.Module):
         positive_distance = batch_cosine_similarity(anchor, positive)
         negative_distance = batch_cosine_similarity(anchor, negative)
         losses = F.relu(self.margin - (positive_distance - negative_distance))
-        return losses.mean()
+
+        incorrect_predictions = (losses > 0).float().sum()/anchor.size(0)*100
+        return losses.mean(), incorrect_predictions
 
 
 def cosine_similarity_triplet(vec1, vec2):
@@ -33,22 +35,21 @@ def cosine_similarity_triplet(vec1, vec2):
 
 
 def cosine_similarity(x, y):
-    # Вычисляем числитель: скалярное произведение векторов x и y
-    x = x.to('cpu').detach().numpy()
-    y = y.to('cpu').detach().numpy()
-    dot_product = np.dot(x, y)
+    # Преобразование векторов в массивы NumPy
+    x_np = np.array(x)
+    y_np = np.array(y)
 
-    # Вычисляем знаменатель: произведение евклидовых норм векторов x и y
-    norm_x = np.linalg.norm(x)
-    norm_y = np.linalg.norm(y)
+    # Вычисление скалярного произведения
+    dot_product = np.dot(x_np, y_np)
 
-    # Убедимся, что знаменатель не равен нулю
-    if norm_x == 0 or norm_y == 0:
-        return 0
-    else:
-        # Вычисляем косинусное сходство
-        cosine_similarity = dot_product / (norm_x * norm_y)
-        return cosine_similarity
+    # Вычисление норм векторов
+    norm_x = np.linalg.norm(x_np)
+    norm_y = np.linalg.norm(y_np)
+
+    # Вычисление косинусного сходства
+    cosine_similarity = dot_product / (norm_x * norm_y)
+
+    return cosine_similarity
 
 
 def batch_cosine_similarity(x, y):

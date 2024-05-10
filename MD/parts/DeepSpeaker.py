@@ -14,18 +14,26 @@ class ClippedReLU(nn.Module):
 class ResBlock(nn.Module):
     def __init__(self, filters: int):
         super(ResBlock, self).__init__()
-        self.conv = nn.Conv2d(filters, filters, kernel_size=3, padding=1)
+        self.conv1 = nn.Conv2d(filters, filters, kernel_size=3, stride=1, padding=0)
+        self.conv2 = nn.Conv2d(filters, filters, kernel_size=3, stride=1, padding=0)
         self.clipped_relu = ClippedReLU(max_value=20)
-        self.bn = nn.BatchNorm2d(filters)
+        self.bn1 = nn.BatchNorm2d(filters)
+        self.bn2 = nn.BatchNorm2d(filters)
         # self.identity = nn.Identity()
+
+        # self.projection = nn.Sequential(
+        #     nn.Conv2d(filters, filters, kernel_size=1, stride=1),
+        #     nn.BatchNorm2d(filters)
+        # )
 
     def forward(self, x):
         identity = x
-        out = self.conv(x)
-        out = self.clipped_relu(self.bn(out))
-        out = self.conv(out)
-        out = self.bn(out)
-        # x = self.identity(x)  # Add the residual (skip) connection
+        out = self.conv1(x)
+        out = self.clipped_relu(self.bn1(out))
+        out = self.conv2(out)
+        out = self.bn2(out)
+        # out = self.identity(out)  # Add the residual (skip) connection
+        identity = self.projection(identity)
         out += identity
         out = self.clipped_relu(out)
         return out
@@ -37,16 +45,20 @@ class ConvResBlock(nn.Module):
         super(ConvResBlock, self).__init__()
         self.conv = nn.Conv2d(in_channel, filters, kernel_size=5, padding=2, stride=2)
         self.clipped_relu = ClippedReLU(max_value=20)
-        self.res_block = ResBlock(filters)
+        self.res_block1 = ResBlock(filters)
+        self.res_block2 = ResBlock(filters)
+        self.res_block3 = ResBlock(filters)
         self.bn = nn.BatchNorm2d(filters)
-        self.identity = nn.Identity()
 
     def forward(self, x):
         x = self.conv(x)
         x = self.clipped_relu(self.bn(x))
-        x = self.res_block(x)
-        x = self.res_block(x)
-        out = self.res_block(x)
+        x = self.res_block1(x)
+        # x = self.clipped_relu(self.bn(x))
+        x = self.res_block2(x)
+        # x = self.clipped_relu(self.bn(x))
+        out = self.res_block3(x)
+        # out = self.clipped_relu(self.bn(out))
         return out
 
 
