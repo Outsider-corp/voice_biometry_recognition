@@ -394,6 +394,207 @@ class DtdnnssBase(nn.Module):
 
         return feature23
 
+class TDNN_(nn.Module):
+    def __init__(self, in_channels,
+                 out_channels,
+                 kernel_size,
+                 stride=1,
+                 padding=Padding.SAME,
+                 dilation=1,
+                 groups=1,
+                 bias=False,
+                 act=Activation.ReLU,
+                 reduction=4,
+                 is_use_skip_connect=False,
+                 is_folded=False,
+                 in_shape=None,
+                 out_shape=None
+                 ):
+        super(TDNN_, self).__init__()
+        self.in_channels = in_channels
+        self.out_channels = out_channels
+        self.kernel_size = kernel_size
+        self.stride = stride
+        self.padding_type = padding
+        self.dilation = dilation
+        self.groups = groups
+        self.bias = bias
+        self.act_type = act
+        self.is_use_skip_connect = is_use_skip_connect
+        self.is_folded = is_folded
+        self.padding = padding
+        self.in_shape = in_shape
+        self.out_shape = out_shape
+        self.conv = Conv1d_(
+            in_channels=self.in_channels,
+            out_channels=self.out_channels,
+            kernel_size=self.kernel_size,
+            stride=self.stride,
+            padding=self.padding,
+            dilation=self.dilation,
+            groups=self.groups,
+            bias=self.bias,
+            act=Activation.Identity,
+            is_folded=is_folded,
+            in_shape=in_shape,
+            out_shape=out_shape
+        )
+        self.bn = BatchNorm1d_(num_features=self.out_channels,
+                               momentum=0.1,
+                               affine=True,
+                               act=Activation.Identity,
+                               is_folded=is_folded)
+        if self.act_type == Activation.PReLU:
+            self.act = _act(self.act_type, num_parameters=self.out_channels)
+        else:
+            self.act = _act(self.act_type)
+
+    def forward(self, inputs):
+        result = self.conv(inputs)
+        result = self.bn(result)
+        result = self.act(result)
+        if self.is_use_skip_connect is True and self.in_channels == self.out_channels:
+            result = result + inputs
+        return result
+
+    @property
+    def multiply_adds(self):
+        madds = self.conv.multiply_adds
+        madds += self.bn.multiply_adds
+        return madds
+
+    @property
+    def params(self):
+        params = self.conv.params
+        params += self.bn.params
+        if self.act_type == Activation.PReLU:
+            params += self.out_channels
+        return params
+
+
+class DTDNNSS_(nn.Module):
+    def __init__(self, in_channels,
+                 mid_channels,
+                 out_channels,
+                 kernel_size,
+                 stride=1,
+                 padding=Padding.SAME,
+                 dilation=None,
+                 groups=1,
+                 bias=False,
+                 act=Activation.PReLU,
+                 is_folded=False,
+                 in_shape=None,
+                 out_shape=None,
+                 null=False,
+                 reduction=2
+                 ):
+        super(DTDNNSS_, self).__init__()
+        self.in_channels = in_channels
+        self.mid_channels = mid_channels
+        self.out_channels = out_channels
+        self.kernel_size = kernel_size
+        self.stride = stride
+        self.padding_type = padding
+        self.dilation = dilation
+        self.groups = groups
+        self.bias = bias
+        self.act_type = act
+        self.is_folded = is_folded
+        self.padding = padding
+        self.in_shape = in_shape
+        self.out_shape = out_shape
+        self.bn1 = BatchNorm1d_(num_features=self.in_channels,
+                                momentum=0.1,
+                                affine=True,
+                                act=Activation.Identity,
+                                is_folded=is_folded)
+        self.act1 = _act(self.act_type, self.in_channels)
+        self.conv1 = Conv1d_(
+            in_channels=self.in_channels,
+            out_channels=self.mid_channels,
+            kernel_size=1,
+            stride=self.stride,
+            padding=self.padding,
+            dilation=1,
+            groups=self.groups,
+            bias=self.bias,
+            act=Activation.Identity,
+            is_folded=is_folded,
+            in_shape=in_shape,
+            out_shape=out_shape
+        )
+
+        self.bn2 = BatchNorm1d_(num_features=self.mid_channels,
+                                momentum=0.1,
+                                affine=True,
+                                act=Activation.Identity,
+                                is_folded=is_folded)
+        self.act2 = _act(self.act_type, self.mid_channels)
+        self.conv2 = nn.ModuleList()
+        for _dilation in self.dilation:
+            self.conv2.append(
+                Conv1d_(
+                    in_channels=self.mid_channels,
+                    out_channels=self.out_channels,
+                    kernel_size=self.kernel_size,
+                    stride=self.stride,
+                    padding=self.padding,
+                    dilation=_dilation,
+                    groups=self.groups,
+                    bias=self.bias,
+                    act=Activation.Identity,
+                    is_folded=is_folded,
+                    in_shape=in_shape,
+                    out_shape=out_shape
+                )
+            )
+        self.select = StatsSelect(out_channels, len(dilation), null=null, reduction=reduction)
+        # self._initialize_weights()
+
+    def _initialize_weights(self):
+        for m in self.modules():
+            if isinstance(m, nn.Conv1d):
+                n = m.kernel_size[0] * m.out_channels
+                m.weight.data.normal_(0, math.sqrt(1. / n))
+                # m.weight.data.fill_(1)
+                if m.bias is not None:
+                    m.bias.data.zero_()
+            elif isinstance(m, nn.BatchNorm1d):
+                if m.weight is not None:
+                    m.weight.data.fill_(1)
+                if m.bias is not None:
+                    m.bias.data.zero_()
+            elif isinstance(m, nn.Linear):
+                m.weight.data.normal_(0, 0.01)
+                # m.weight.data.fill_(1)
+                if m.bias is not None:
+                    m.bias.data.zero_()
+
+    def forward(self, inputs):
+        result = self.conv1(self.act1(self.bn1(inputs)))
+        result = self.act2(self.bn2(result))
+        # result = self.select([conv(result) for conv in self.conv2])
+        result = self.select(self.conv2[0](result), self.conv2[1](result))
+        result = torch.cat([inputs, result], 1)
+        return result
+
+    @property
+    def multiply_adds(self):
+        madds = self.bn1.multiply_adds
+        madds += self.conv1.multiply_adds
+        madds = self.bn2.multiply_adds
+        madds += sum([conv.multiply_adds for conv in self.conv2])
+        return madds
+
+    @property
+    def params(self):
+        params = self.bn1.params
+        params += self.conv1.params
+        params += self.bn2.params
+        params += sum([conv.params for conv in self.conv2])
+        return params
+
 
 if __name__ == "__main__":
     from torchsummary import summary
@@ -401,3 +602,4 @@ if __name__ == "__main__":
     model = DtdnnssBase(num_class=7232, feature_dim=128).to('cuda')
     print(sum(p.numel() for p in model.parameters() if p.requires_grad))
     summary(model, (30, 200))
+
