@@ -345,7 +345,7 @@ class DtdnnssBase_v1(nn.Module):
     def get_param(self):
         return self.param
 
-    @for_extract_embedding(maxChunk=10000, isMatrix=True)
+    #@for_extract_embedding(maxChunk=10000, isMatrix=True)
     def extract_embedding(self, inputs):
         # TODO Layer 1
         feature1 = self.layer1(inputs)

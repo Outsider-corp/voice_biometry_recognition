@@ -11,14 +11,14 @@ from speechnas.network.dtdnnss_searched import DtdnnssBase_v1
 
 os.chdir(r'D:\Py_Projects\neuro')
 
-model_params = {'persons_count': 100,
+model_params = {'persons_count': 50,
                 'max_voices': 5,
-                'mfcc_count': 40,
+                'mfcc_count': 20,
                 'batch_size': 16,
                 'target_sr': 16000,
                 'n_fft': 1024,
                 'hop_length': 512,
-                'n_mels': 40,
+                'n_mels': 60,
                 'lr': 0.001,
                 'margin_triplet': 0.3}
 
@@ -29,15 +29,15 @@ model_params = {'persons_count': 100,
 #         'rb') as f:
 #     voice_params_mfcc = pickle.load(f)
 
-with open(f'voice_params/v5_voice_params_100pers_5vox_mfcc.pkl', 'rb') as f:
+with open(f'voice_params/v8_voice_params_50pers_5vox_mfcc.pkl', 'rb') as f:
     voice_params_mfcc = pickle.load(f)
 
-ver = '002'
-model_name = (f'DTDNNSS_100p_5vox')
+ver = '001'
+model_name = f'DTDNNSS_50p_5vox_{ver}'
 with open(os.path.join('models', f'params_{model_name}.json'), 'w') as f:
-    model_params.update({"epoches": 50})
+    model_params.update({"epoches": 100})
     json.dump(model_params, f)
-model = DtdnnssBase(num_class=7232, feature_dim=128,
+model = DtdnnssBase(num_class=3000, feature_dim=128,
                     in_channels=model_params['mfcc_count']).float()
 # print( sum(p.numel() for p in model.parameters() if p.requires_grad) )
 stat = None

@@ -37,7 +37,7 @@ def for_extract_embedding(maxChunk=10000, isMatrix=True):
                 if isMatrix:
                     input = torch.tensor(input)
                     input = torch.unsqueeze(input, dim=0)
-                    input = input.transpose(1, 2)
+                    # input = input.transpose(1, 2)
 
                 input = input.cuda()
                 num_frames = input.shape[2]
@@ -58,7 +58,7 @@ def for_extract_embedding(maxChunk=10000, isMatrix=True):
                 if train_status:
                     self.train()
 
-                return torch.squeeze(embedding.transpose(1, 2)).cpu()
+                return torch.squeeze(embedding.transpose(1, 2)).cpu().tolist()
 
         return _wrapper
 

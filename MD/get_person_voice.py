@@ -92,10 +92,6 @@ def get_features_from_file(file, model_params, mfcc: bool = False, spectrogram: 
     if spectrogram:
         spectrogram_features = get_spectrogram(good_audio, model_params['target_sr'],
                                                n_fft=model_params['n_fft'])
-    if mfcc and not spectrogram:
-        return mfcc_features
-    elif not mfcc and spectrogram:
-        return spectrogram_features
     return mfcc_features, spectrogram_features
 
 def get_features_from_recording(model_params, mfcc: bool = False, spectrogram: bool = False,
@@ -117,10 +113,6 @@ def get_features_from_recording(model_params, mfcc: bool = False, spectrogram: b
     if spectrogram:
         spectrogram_features = get_spectrogram(good_audio, model_params['target_sr'],
                                                n_fft=model_params['n_fft'])
-    if mfcc and not spectrogram:
-        return mfcc_features
-    elif not mfcc and spectrogram:
-        return spectrogram_features
     return mfcc_features, spectrogram_features
 
 def get_voice_params(data_path: str, model_params: Dict, print_info: bool = True,
@@ -135,7 +127,7 @@ def get_voice_params(data_path: str, model_params: Dict, print_info: bool = True
         person_params_spectro = []
         voice_cnt = 0
         for file in files:
-            mfcc, spectro = get_features_from_file(f'{file}', model_params,
+            mfcc, spectro = get_features_from_file(file, model_params,
                                                    mfcc=get_mfccs,
                                                    spectrogram=get_spectrogram)
             if get_mfccs:
@@ -151,6 +143,9 @@ def get_voice_params(data_path: str, model_params: Dict, print_info: bool = True
             voice_params_spectro[person_id] = person_params_spectro
         if print_info:
             print(f'Person {person_id} saved.')
+
+        if person_id == 'id10010':
+            break
 
     return voice_params_mfcc, voice_params_spectro
 

@@ -14,9 +14,9 @@ data_path = r'{}'.format(os.environ['DATASET_PATH'])
 # Получение данных
 id_list = os.listdir(data_path)
 
-model_params = {'persons_count': 100,
+model_params = {'persons_count': 50,
                 'max_voices': 5,
-                'mfcc_count': 40,
+                'mfcc_count': 20,
                 'batch_size': 16,
                 'target_sr': 16000,
                 'n_fft': 1024,
@@ -24,7 +24,7 @@ model_params = {'persons_count': 100,
                 'n_mels': 40,
                 'lr': 0.001,
                 'margin_triplet': 0.3}
-params_name = 'v5'
+params_name = 'v8'
 # Получение голосовых признаков
 voice_params_mfcc = {}
 voice_params_spectro = {}
@@ -54,5 +54,5 @@ with open(os.path.join('voice_params',
 with open(os.path.join('voice_params', f'{params_name}_{pickle_file}_spectro.pkl'), 'wb') as f:
     pickle.dump(voice_params_spectro, f)
 
-# json.dump(model_params,
-#           open(os.path.join('voice_params', f'{params_name}_{pickle_file}.json'), 'w'))
+json.dump(model_params,
+          open(os.path.join('voice_params', f'{params_name}_{pickle_file}.json'), 'w'))
