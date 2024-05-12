@@ -3,7 +3,6 @@ import pickle
 import json
 
 import torch
-from MD.parts.DeepSpeaker import DeepSpeakerModel
 from MD.parts.datasets import create_pair_dataset, create_triplets_dataset
 from MD.parts.train_funcs import train_model_pair, train_model_triplet
 from speechnas.network.dtdnnss_base import DtdnnssBase
@@ -11,16 +10,17 @@ from speechnas.network.dtdnnss_searched import DtdnnssBase_v1
 
 os.chdir(r'D:\Py_Projects\neuro')
 
-model_params = {'persons_count': 50,
+model_params = {'persons_count': 100,
                 'max_voices': 5,
                 'mfcc_count': 20,
                 'batch_size': 16,
                 'target_sr': 16000,
                 'n_fft': 1024,
                 'hop_length': 512,
-                'n_mels': 60,
+                'n_mels': 64,
                 'lr': 0.001,
-                'margin_triplet': 0.3}
+                'margin_triplet': 0.3,
+                'epoches': 50}
 
 # with open(
 #         f'voice_params/voice_params_{model_params["persons_count"]}pers'
@@ -29,13 +29,12 @@ model_params = {'persons_count': 50,
 #         'rb') as f:
 #     voice_params_mfcc = pickle.load(f)
 
-with open(f'voice_params/v8_voice_params_50pers_5vox_mfcc.pkl', 'rb') as f:
+with open(f'voice_params/v7_voice_params_100pers_5vox_mfcc.pkl', 'rb') as f:
     voice_params_mfcc = pickle.load(f)
 
-ver = '001'
-model_name = f'DTDNNSS_50p_5vox_{ver}'
+ver = '008'
+model_name = f'DTDNNSS_100p_5vox_{ver}'
 with open(os.path.join('models', f'params_{model_name}.json'), 'w') as f:
-    model_params.update({"epoches": 100})
     json.dump(model_params, f)
 model = DtdnnssBase(num_class=3000, feature_dim=128,
                     in_channels=model_params['mfcc_count']).float()

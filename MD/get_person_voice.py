@@ -66,9 +66,9 @@ def get_mfccs(audio, sample_rate: int, n_mfcc: int = 40, n_fft: int = 512,
                         hop_length=hop_length, n_mels=n_mels)
 
 
-def get_spectrogram(audio, sr, n_fft: int = 2048):
+def get_spectrogram(audio, n_fft: int = 1024, hop_length: int = 512):
     audio = audio.detach().numpy()
-    stft = np.abs(librosa.stft(audio, n_fft=n_fft))
+    stft = np.abs(librosa.stft(audio, n_fft=n_fft, hop_length=hop_length))
     spectrogram = librosa.amplitude_to_db(stft, ref=np.max)
     return spectrogram
 
@@ -90,12 +90,14 @@ def get_features_from_file(file, model_params, mfcc: bool = False, spectrogram: 
                                               win_length=400)
         mfcc_features = mfcc_features.squeeze().tolist()
     if spectrogram:
-        spectrogram_features = get_spectrogram(good_audio, model_params['target_sr'],
-                                               n_fft=model_params['n_fft'])
+        spectrogram_features = get_spectrogram(good_audio,
+                                               n_fft=model_params['n_fft'],
+                                               hop_length=model_params['hop_length'])
     return mfcc_features, spectrogram_features
 
+
 def get_features_from_recording(model_params, mfcc: bool = False, spectrogram: bool = False,
-                           save_clear_audio_path: Union[str, None] = None):
+                                save_clear_audio_path: Union[str, None] = None):
     good_audio = preprocess_audio_recording(target_sample_rate=model_params['target_sr'])
     if save_clear_audio_path is not None:
         torchaudio.save(f'{save_clear_audio_path}.wav', good_audio, model_params['target_sr'])
@@ -111,9 +113,11 @@ def get_features_from_recording(model_params, mfcc: bool = False, spectrogram: b
                                               win_length=400)
         mfcc_features = mfcc_features.squeeze().tolist()
     if spectrogram:
-        spectrogram_features = get_spectrogram(good_audio, model_params['target_sr'],
-                                               n_fft=model_params['n_fft'])
+        spectrogram_features = get_spectrogram(good_audio,
+                                               n_fft=model_params['n_fft'],
+                                               hop_length=model_params['hop_length'])
     return mfcc_features, spectrogram_features
+
 
 def get_voice_params(data_path: str, model_params: Dict, print_info: bool = True,
                      get_mfccs: bool = True, get_spectrogram: bool = False):

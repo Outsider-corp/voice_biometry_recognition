@@ -1,1 +1,12 @@
-{"persons_count": 100, "max_voices": 5, "mfcc_count": 20, "batch_size": 16, "target_sr": 16000, "n_fft": 1024, "hop_length": 512, "n_mels": 40, "lr": 0.001, "margin_triplet": 0.3}
+{
+  "persons_count": 100,
+  "max_voices": 5,
+  "mfcc_count": 20,
+  "batch_size": 16,
+  "target_sr": 16000,
+  "n_fft": 1024,
+  "hop_length": 512,
+  "n_mels": 40,
+  "lr": 0.001,
+  "margin_triplet": 0.3
+}

@@ -14,17 +14,17 @@ data_path = r'{}'.format(os.environ['DATASET_PATH'])
 # Получение данных
 id_list = os.listdir(data_path)
 
-model_params = {'persons_count': 50,
-                'max_voices': 5,
-                'mfcc_count': 20,
+model_params = {'persons_count': 100,
+                'max_voices': 10,
+                'mfcc_count': 30,
                 'batch_size': 16,
                 'target_sr': 16000,
                 'n_fft': 1024,
                 'hop_length': 512,
-                'n_mels': 40,
+                'n_mels': 64,
                 'lr': 0.001,
-                'margin_triplet': 0.3}
-params_name = 'v8'
+                'margin_triplet': 0.1}
+params_name = 'v10'
 # Получение голосовых признаков
 voice_params_mfcc = {}
 voice_params_spectro = {}
