@@ -73,13 +73,13 @@ def emb_from_rec(model, model_params,
     return emb
 
 
-def get_DTDNNSS_model(weights_file: str = None, device: str = 'cuda'):
+def get_DTDNNSS_model(weights_file: str = None, device: str = 'cuda', num_class: int = 7232):
     if weights_file is None:
-        models_path = r'models\correct'
+        models_path = r'models\7. DTDNNSS_01\DTDNNSS_20mfcc_001.pth'
         weights = 'DTDNNSS_20mfcc_001.pth'
         weights_file = os.path.join(models_path, weights)
 
-    model = DtdnnssBase(num_class=7232, feature_dim=128).float()
+    model = DtdnnssBase(num_class=num_class, feature_dim=128).float()
     model = get_model(model, weights_file).to(device)
     return model
 
@@ -113,7 +113,7 @@ def identification_emb(db: Dict, target_emb: List):
         for i, emb in enumerate(db[user]):
             cos = cosine_similarity(emb, target_emb)
             df.loc[len(df)] = {'user': user, 'voice': i, 'cos': cos}
-    df.sort_values(by='cos', ascending=True, inplace=True)
+    df.sort_values(by='cos', ascending=False, inplace=True)
     return df
 
 
