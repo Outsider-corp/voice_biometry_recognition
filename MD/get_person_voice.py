@@ -155,8 +155,8 @@ def get_voice_params(data_path: str, model_params: Dict, print_info: bool = True
 
 
 if __name__ == '__main__':
-    input_folder = r"D:\Py_Projects\neuro\output\ogg_voices"
-    output_folder = r"D:\Py_Projects\neuro\output\wav_voices"
+    input_folder = r"output\ogg_voices"
+    output_folder = r"output\wav_voices"
     duration_s = 10
 
     # Вызываем функцию для обрезки и конвертации аудио

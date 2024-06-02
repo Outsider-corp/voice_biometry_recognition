@@ -1,7 +1,8 @@
 from __future__ import print_function, division
 import os
 
-os.chdir(r'D:\Py_Projects\neuro')
+os.chdir(r'../')
+os.chdir(r'../')
 import math
 
 import torch

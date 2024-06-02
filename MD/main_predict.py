@@ -13,7 +13,8 @@ from MD.get_person_voice import get_voice_params, get_features_from_file, crop_a
 from MD.parts.loss_acc import cosine_similarity
 from speechnas.network.dtdnnss_base import DtdnnssBase
 
-os.chdir(r'D:\Py_Projects\neuro')
+os.chdir(r'../')
+os.chdir(r'../')
 
 
 def get_model(model, weights_file: str):

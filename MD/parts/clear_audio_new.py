@@ -86,5 +86,5 @@ def clear_audio_newest(file_path: str, target_sr: int = 16000,
 
 if __name__ == '__main__':
     # Загрузите ваш аудиофайл
-    file_path = r'D:\University\Диссерт\test_data_01\id10001\1zcIwhmdeo4\00001.wav'
+    file_path = r'test_data_01\id10001\1zcIwhmdeo4\00001.wav'
     clear_audio(file_path, 16000, segment_length=5)

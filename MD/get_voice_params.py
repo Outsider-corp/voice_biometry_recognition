@@ -6,7 +6,8 @@ from dotenv import load_dotenv
 from MD.get_person_voice import get_audio_for_id, get_features_from_file
 from MD.parts.torchaudio_clear import preprocess_audio_from_file, compute_mfcc_features
 
-os.chdir(r'D:\Py_Projects\neuro')
+os.chdir(r'../')
+os.chdir(r'../')
 
 load_dotenv()
 data_path = r'{}'.format(os.environ['DATASET_PATH'])

@@ -15,7 +15,8 @@ from torchvision.models import ResNet34_Weights
 from MD.parts.datasets import create_triplets
 from MD.parts.train_funcs import train_model_triplet
 
-os.chdir(r'D:\Py_Projects\neuro')
+os.chdir(r'../')
+os.chdir(r'../')
 
 
 # Подготовка данных

@@ -8,7 +8,8 @@ from MD.parts.train_funcs import train_model_pair, train_model_triplet
 from speechnas.network.dtdnnss_base import DtdnnssBase
 from speechnas.network.dtdnnss_searched import DtdnnssBase_v1
 
-os.chdir(r'D:\Py_Projects\neuro')
+os.chdir(r'../')
+os.chdir(r'../')
 
 model_params = {'persons_count': 100,
                 'max_voices': 5,
