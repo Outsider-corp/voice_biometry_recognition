@@ -22,13 +22,6 @@ model_params = {'persons_count': 100,
                 'margin_triplet': 0.3,
                 'epoches': 50}
 
-# with open(
-#         f'voice_params/voice_params_{model_params["persons_count"]}pers'
-#         f'_{model_params["max_voices"]}vox_{model_params["mfcc_count"]}mfcc_'
-#         f'{str(model_params["segment_length"]).replace(".", ",")}segml.pkl',
-#         'rb') as f:
-#     voice_params_mfcc = pickle.load(f)
-
 with open(f'voice_params/v7_voice_params_100pers_5vox_mfcc.pkl', 'rb') as f:
     voice_params_mfcc = pickle.load(f)
 
@@ -38,11 +31,8 @@ with open(os.path.join('models', f'params_{model_name}.json'), 'w') as f:
     json.dump(model_params, f)
 model = DtdnnssBase(num_class=3000, feature_dim=128,
                     in_channels=model_params['mfcc_count']).float()
-# print( sum(p.numel() for p in model.parameters() if p.requires_grad) )
 stat = None
 
-# model.load_state_dict(state_dict, strict=False)
-# stat = json.load(open(os.path.join('models', f'DeepSpeaker_100pers_5vox_20mfcc_tripl_002_epo20.json')))
 dataloaders = create_triplets_dataset(voice_params_mfcc, model_params, 2)
 model, stat = train_model_triplet(model, dataloaders,
                                   epoches=model_params['epoches'],
