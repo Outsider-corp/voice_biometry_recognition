@@ -98,7 +98,7 @@ with open(f'voice_params/v10_voice_params_100pers_10vox_spectro.pkl', 'rb') as f
 
 dataloaders = create_triplets_dataset(spec_params, model_params, count_x_data=2)
 
-model_name = 'ResNet34_100p_10vox_003_128'
+model_name = 'TEST_ResNet34_100p_10vox_003_128'
 
 with open(os.path.join('models', f'params_{model_name}.json'), 'w') as f:
     json.dump(model_params, f)
@@ -109,13 +109,13 @@ model.conv1 = nn.Conv2d(1, 64, kernel_size=7, stride=2, padding=3, bias=False)
 # Обучение модели
 model.fc = nn.Linear(in_features=512, out_features=128, bias=True)
 
-state_dict = torch.load(f'models/ResNet34_100p_10vox_003_128_epo66.pth')
-model.load_state_dict(state_dict, strict=False)
-stat = json.load(open(os.path.join('models', f'ResNet34_100p_10vox_003_128.json')))
+# state_dict = torch.load(f'models/ResNet34_100p_10vox_003_128_epo66.pth')
+# model.load_state_dict(state_dict, strict=False)
+# stat = json.load(open(os.path.join('models', f'ResNet34_100p_10vox_003_128.json')))
 model, stat = train_model_triplet(model, dataloaders,
                                   epoches=model_params['epoches'],
                                   save_name=model_name,
                                   lr=model_params['lr'],
                                   margin=model_params['margin_triplet'],
-                                  start_epo=67, stat=stat)
+                                  start_epo=0, stat=None)
 torch.save(model.state_dict(), os.path.join('models', f'{model_name}___end.pth'))

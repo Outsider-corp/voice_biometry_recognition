@@ -530,7 +530,10 @@
   "66": {
     "epoch_loss_train": 0.0014333054507997902,
     "epoch_acc_train": 0.9773863636363637,
-    "epoch_loss_perc_train": 0.14133522727272727
+    "epoch_loss_perc_train": 0.14133522727272727,
+    "epoch_loss_val": 0.004603236822242086,
+    "epoch_acc_val": 0.9559090909090909,
+    "epoch_loss_perc_val": 0.2755681818181818
   },
   "67": {
     "epoch_loss_train": 0.003922009189528498,

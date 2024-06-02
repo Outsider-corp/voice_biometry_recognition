@@ -5,6 +5,8 @@ from typing import Dict, List, Literal
 
 import pandas as pd
 import torch
+from torch import nn
+from torchvision import models
 
 from MD.get_person_voice import get_voice_params, get_features_from_file, crop_and_convert_audio, \
     get_features_from_recording
@@ -75,11 +77,21 @@ def emb_from_rec(model, model_params,
 
 def get_DTDNNSS_model(weights_file: str = None, device: str = 'cuda', num_class: int = 7232):
     if weights_file is None:
-        models_path = r'models\7. DTDNNSS_01\DTDNNSS_20mfcc_001.pth'
-        weights = 'DTDNNSS_20mfcc_001.pth'
-        weights_file = os.path.join(models_path, weights)
+        weights_file = r'models\7. DTDNNSS_01\DTDNNSS_20mfcc_001.pth'
 
     model = DtdnnssBase(num_class=num_class, feature_dim=128).float()
+    model = get_model(model, weights_file).to(device)
+    return model
+
+
+def get_ResNet_model(weights_file: str = None, device: str = 'cuda'):
+    if weights_file is None:
+        weights_file = r'models\11. ResNet34_5\ResNet34_100p_10vox_003_128_epo88.pth'
+
+    model = models.resnet34()
+    model.conv1 = nn.Conv2d(1, 64, kernel_size=7, stride=2, padding=3, bias=False)
+    # Обучение модели
+    model.fc = nn.Linear(in_features=512, out_features=128, bias=True)
     model = get_model(model, weights_file).to(device)
     return model
 
